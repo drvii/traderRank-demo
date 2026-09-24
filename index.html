@@ -1,0 +1,1542 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TraderRank</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><circle cx='10' cy='10' r='10' fill='%231f1f22'/><rect x='7' y='5' width='6' height='10' fill='%233fbf8c'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#000000; --panel:#0a0a0c; --raised:#0a0a0c; --hover:#0c0c0e;
+  --border:#1f1f22; --border-2:#2a2a30;
+  --rule-faint:#141416; --rule-hair:#111113;
+  --fg:#dfe2e0; --muted:#7a7d84; --faint:#63666d; --fainter:#4e5157;
+  --dim:#34343a;
+  --up:#3fbf8c; --down:#ec5c6d; --warn:#dfa246; --accent:#6f8dff;
+  --sel:rgba(63,191,140,.06);
+  --r:0;
+  --gutter:12px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+/* One knob for overall size: everything below is drawn at the design's 1x and
+   scaled together. Media queries see the real viewport, so the breakpoints below trip at 1/zoom of their value in layout px. */
+html{zoom:1.3}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);
+  font:12px/1.45 "JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:1px solid var(--up);outline-offset:2px}
+.n{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+.up{color:var(--up)}.down{color:var(--down)}.warn{color:var(--warn)}
+.muted{color:var(--muted)}.faint{color:var(--faint)}.fainter{color:var(--fainter)}
+h1,h2,h3{margin:0;font-weight:400}
+.grow{flex:1}
+
+/* ---- status bar ---- */
+.bar{display:flex;align-items:center;height:26px;padding:0 var(--gutter);
+  font-size:10.5px;color:var(--muted);white-space:nowrap;text-transform:uppercase;
+  border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.bar::-webkit-scrollbar{display:none}
+.brand{display:flex;align-items:center;gap:2px;font-weight:700;font-size:11px;text-transform:none}
+.brand-path{color:var(--faint)}
+.brand-cursor{width:6px;height:11px;background:var(--up);flex:none}
+.sep{color:var(--dim);margin:0 9px}
+.stamp{color:var(--faint);text-transform:none}
+.bar button{background:none;border:none;padding:0;color:var(--up);
+  cursor:pointer;font-size:inherit;text-transform:uppercase}
+.bar button:hover{color:var(--fg)}
+.bar button:disabled{color:var(--faint);cursor:default}
+.alert{border-bottom:1px solid var(--border);background:#0d0a03;color:var(--warn);
+  padding:5px 12px;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase}
+.alert::before{content:"! "}
+.demo #refresh,.demo #sel,.demo .icon.add,.demo .icon.rm,.demo .trash{display:none}
+.demo .alert.note{color:var(--faint)}
+.demo .alert.note::before{content:""}
+
+/* ---- page ---- */
+.wrap{max-width:1500px;margin:0 auto;padding:0 0 120px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;
+  align-items:stretch}
+.layout main{min-width:0}
+/* The sidebar is fenced off by one hairline and runs exactly as deep as the
+   cards beside it — past that the list scrolls. */
+aside{position:relative;display:flex;flex-direction:column;min-height:286px;
+  border-left:1px solid var(--border)}
+#groups-body{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin}
+@media (max-width:1300px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  aside{border-left:none;padding-top:30px;min-height:0}
+  #groups-body{overflow:visible}
+}
+section{padding-top:0}
+
+/* Label strip: the one heading style — sections, sidebar, panel, sheet. */
+.shead{display:flex;align-items:center;gap:9px;padding:4px 12px;
+  border-bottom:1px solid var(--border);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--up)}
+.shead h2{font-size:inherit;letter-spacing:inherit;color:inherit}
+.shead .c{color:var(--faint)}
+.shead .grow{flex:1}
+#active-name{color:var(--faint);letter-spacing:.06em}
+.empty{color:var(--faint);font-size:10.5px;padding:24px 18px;text-align:center;
+  border:1px dashed var(--border-2);line-height:1.6;margin:12px}
+.empty b{display:block;color:var(--muted);font-weight:700;margin-bottom:4px}
+
+/* ---- buttons ---- */
+button.b{background:none;border:1px solid var(--border-2);height:24px;padding:0 10px;
+  font-size:10px;color:var(--muted);cursor:pointer;text-transform:uppercase;
+  transition:.12s}
+button.b:hover{color:var(--fg)}
+button.b:disabled{opacity:.4;cursor:default}
+button.b.p{background:var(--up);border:none;color:#000;font-weight:700;
+  letter-spacing:.07em}
+button.b.p:hover{color:#000;filter:brightness(1.1)}
+button.b.a{border-color:var(--up);color:var(--up);letter-spacing:.07em}
+button.b.a:hover{background:var(--up);color:#000}
+button.icon{display:inline-flex;align-items:center;justify-content:center;
+  background:none;border:none;padding:0;flex:none;color:var(--faint);
+  cursor:pointer;transition:.12s}
+button.icon:hover{color:var(--fg)}
+button.icon svg{display:block}
+
+/* ---- book cards ---- */
+.cards{display:grid;grid-template-columns:repeat(3,1fr);align-content:start;
+  margin-right:-1px}
+@media (max-width:1300px){.cards{margin-right:0}}
+@media (max-width:900px){.cards{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}}
+.card{padding:8px 11px;border-right:1px solid var(--rule-faint);
+  border-bottom:1px solid var(--border);cursor:pointer;transition:.12s;
+  position:relative;overflow:hidden}
+.card:hover{background:var(--panel)}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;
+  background:var(--faint)}
+.card.ride::before{background:var(--up)}
+.card.add::before{background:var(--accent)}
+.card.cut::before{background:var(--down)}
+.card .top{display:flex;align-items:center;gap:7px;font-size:11.5px}
+.card .nmline{display:flex;align-items:baseline;gap:7px;overflow:hidden;flex:1;min-width:0}
+.card .nm{font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.card .rk{flex:none;font-size:10px;color:var(--faint);text-transform:uppercase}
+.chip{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  flex:none;line-height:1.1;color:var(--faint)}
+.chip.ride,.chip.add{color:var(--up)}
+.chip.cut{color:var(--down)}
+.chip.lev{color:var(--warn)}
+.card .hl{display:flex;align-items:baseline;gap:7px;margin-top:5px}
+.card .amt{font-size:20px;font-weight:500;letter-spacing:-.035em;line-height:1.25}
+.card .prov{font-size:9px;color:var(--fainter);letter-spacing:.04em;flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-transform:uppercase}
+.card .sk{font-size:9px;color:var(--faint);letter-spacing:.09em;text-transform:uppercase}
+.card .sv{font-size:12px;color:var(--fg)}
+/* ROI and MDD at three windows, aligned in their own columns. */
+.card .wins{display:grid;grid-template-columns:auto repeat(3,1fr);
+  gap:1px 8px;align-items:baseline;margin-top:6px;font-size:11px}
+.card .wins .k{font-size:9px;color:var(--faint);letter-spacing:.11em;
+  text-transform:uppercase}
+.card .wins .h{font-size:9px;color:var(--faint);letter-spacing:.1em;text-align:right}
+.card .wins .c{text-align:right}
+.card .foot{display:flex;align-items:flex-end;justify-content:space-between;
+  gap:8px;font-size:10px;color:var(--muted);line-height:1.45;
+  border-top:1px solid var(--rule-faint);margin-top:7px;padding-top:6px;
+  white-space:normal;min-height:2.9em}
+.card .foot .txt{flex:1;min-width:0}
+.card .rm,.card .add{flex:none;opacity:.55}
+.card .rm{color:var(--down)}
+.card .add{color:var(--up)}
+.card .rm:hover,.card .add:hover{opacity:1}
+
+/* ---- stat strip ---- */
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(120px,1fr);
+  border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.s{padding:9px 12px;border-right:1px solid var(--rule-faint)}
+.s:last-child{border-right:none}
+.s .k{font-size:9px;letter-spacing:.12em;color:var(--faint);text-transform:uppercase}
+.s .v{font-size:16px;font-weight:500;letter-spacing:-.02em;margin-top:5px;
+  white-space:nowrap}
+.s .v small{font-size:10px;font-weight:400;color:var(--fainter);margin-left:5px;
+  letter-spacing:0;text-transform:uppercase}
+.s .v.trio i{font-style:normal;color:var(--dim);margin:0 3px;font-weight:400}
+
+/* ---- tables ---- */
+.tablescroll{overflow-x:auto;scrollbar-width:thin}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{text-align:right;font-size:9px;font-weight:400;color:var(--faint);
+  letter-spacing:.12em;text-transform:uppercase;padding:4px 7px;
+  white-space:nowrap;border-bottom:1px solid var(--border)}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{color:var(--muted)}
+th[aria-sort]{color:var(--up)}
+th i{font-style:normal;margin-left:3px}
+th:first-child,td:first-child{text-align:left;padding-left:12px;width:1%}
+th.l,td.l{text-align:left}
+th:last-child,td:last-child{padding-right:12px}
+td{text-align:right;padding:2.5px 7px;border-bottom:1px solid var(--rule-hair);
+  white-space:nowrap}
+td.l,td:last-child.l{text-align:left}
+td .t3{display:inline-flex;align-items:baseline;justify-content:flex-end}
+td .rowline{display:block;margin-left:auto}
+td .t3 i{font-style:normal;color:var(--dim);margin:0 2px}
+td.faint,td .faint{color:var(--fainter)}
+tbody tr:hover td{background:var(--hover)}
+tbody tr.sel td{background:var(--sel)}
+tbody tr.ex td{color:var(--muted)}
+tbody tr.ex td.faint{color:var(--fainter)}
+.who{display:flex;align-items:baseline;gap:6px;min-width:195px}
+.who .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:208px;
+  color:var(--fg);font-weight:700;letter-spacing:.02em;text-transform:uppercase}
+tr.ex .who .nm{color:var(--muted)}
+.who .sub{flex:none}
+.sub{font-size:9.5px;color:var(--fainter);white-space:nowrap}
+.tick{width:12px;height:12px;accent-color:var(--up);cursor:pointer;
+  vertical-align:-2px;margin:0}
+.rk-cell{display:inline-flex;align-items:center;gap:3px;justify-content:flex-end}
+td.reason{color:var(--muted);font-size:10.5px;white-space:normal;text-align:left;
+  min-width:210px;max-width:290px;line-height:1.4}
+
+/* ---- lead-trader filter strip ---- */
+.seg{display:inline-flex;gap:13px}
+.seg button{background:none;border:none;padding:0;font-size:10px;letter-spacing:.12em;
+  color:var(--faint);cursor:pointer;text-transform:uppercase}
+.seg button:hover{color:var(--fg)}
+.seg button[aria-pressed="true"]{color:var(--fg)}
+.seg button em{font-style:normal;margin-left:5px}
+.shead input[type=search]{width:170px;background:none;border:none;
+  border-bottom:1px solid transparent;border-radius:0;padding:0;height:auto;
+  font-size:10px;letter-spacing:.12em;color:var(--fg);text-align:right;
+  outline:none}
+.shead input[type=search]::placeholder{color:var(--fainter);text-transform:uppercase}
+.shead input[type=search]:focus{border-bottom-color:var(--border-2)}
+.shead .sep{margin:0}
+
+/* ---- charts ---- */
+.mini{width:100%;height:auto;display:block}
+.mini .lbl{fill:var(--faint);font-size:8px;font-variant-numeric:tabular-nums}
+.mini .pt{fill:var(--up)}
+
+/* ---- watchlists: one flat row each ---- */
+.wl{display:block}
+.wrow{padding:8px 12px;cursor:pointer;transition:.12s;position:relative;
+  border-bottom:1px solid var(--rule-faint)}
+.wrow:hover{background:var(--panel)}
+.wrow.active{background:var(--panel)}
+.wrow.active::before{content:"";position:absolute;left:0;top:0;bottom:0;
+  width:2px;background:var(--up)}
+.wrow .hd{display:flex;align-items:center;gap:6px;font-size:11.5px}
+.trash{flex:none;opacity:.45;padding:0;display:inline-flex;align-items:center;
+  justify-content:center;background:none;border:none;color:var(--down);cursor:pointer}
+.wrow:hover .trash,.trash:hover{opacity:1}
+.trash svg{display:block}
+.wrow .hd .nm{font-weight:700;letter-spacing:.02em;text-transform:uppercase;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.gdot{width:6px;height:6px;flex:none}
+.cnt{display:inline-flex;align-items:center;gap:3px;flex:none;color:var(--faint);
+  font-size:10px}
+.cnt svg{display:block}
+.wrow .bd{display:flex;align-items:center;gap:8px;margin-top:5px}
+.mets{flex:1;min-width:0;display:grid;grid-template-columns:auto 1fr;
+  gap:1px 7px;align-items:baseline;font-size:10.5px}
+.mets .k{font-size:9px;color:var(--faint);letter-spacing:.11em;text-transform:uppercase}
+.mets .v{white-space:nowrap}
+.mets .v i{font-style:normal;color:var(--dim);margin:0 2px}
+.spark{flex:none}
+
+/* ---- selection bar ---- */
+.selbar{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;z-index:35;
+  display:flex;align-items:center;gap:8px;background:var(--panel);
+  border:1px solid var(--border-2);padding:6px 11px;
+  box-shadow:0 10px 34px rgba(0,0,0,.7);font-size:10.5px;letter-spacing:.05em;
+  text-transform:uppercase;max-width:94vw;overflow-x:auto;scrollbar-width:none}
+.selbar b{color:var(--fg)}
+
+/* ---- trader panel ---- */
+/* On the dashboard the panel covers the watchlist and nothing else. */
+#dhost{position:absolute;inset:0;z-index:5}
+#dhost:empty{display:none}
+.drawer.over{position:absolute;inset:0;width:auto;background:#000;
+  border:1px solid var(--border);padding:0}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(352px,100vw);z-index:41;
+  background:#000;border-left:1px solid var(--border);overflow-y:auto;
+  font-size:11.5px}
+.drawer .shead{gap:8px;letter-spacing:.12em}
+.drawer .shead .id{color:var(--fainter)}
+.dbody{padding:11px 12px 18px}
+.dname{display:flex;align-items:center;gap:7px}
+.dname h2{font-size:14px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dname .rk{color:var(--faint);font-size:10.5px}
+.badge{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--faint)}
+.badge.cand{color:var(--up)}
+.tagline{font-size:10px;color:var(--fainter);margin-top:4px;letter-spacing:.05em;
+  text-transform:uppercase}
+.notes{font-size:10.5px;color:var(--muted);line-height:1.5}
+.sec{font-size:9px;color:var(--up);text-transform:uppercase;letter-spacing:.16em;
+  padding:13px 0 5px}
+.dmets{display:grid;grid-template-columns:auto 1fr;gap:3px 9px;margin-top:8px;
+  align-items:baseline;font-size:11.5px;padding:10px 0 11px;
+  border-bottom:1px solid var(--rule-faint)}
+.dmets .k{font-size:9px;color:var(--faint);letter-spacing:.12em;text-transform:uppercase}
+.dmets .v i{font-style:normal;color:var(--dim);margin:0 3px}
+.dwin{font-size:9px;color:var(--faint);letter-spacing:.12em;
+  text-transform:uppercase;text-align:right}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(58px,1fr));
+  gap:9px 11px;padding:11px 0;border-bottom:1px solid var(--rule-faint)}
+.g .k{font-size:8.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.12em;
+  white-space:nowrap}
+.g .v{font-size:12.5px;font-weight:500;margin-top:2px}
+
+/* ---- modal ---- */
+.modal{position:fixed;inset:0;z-index:50;display:flex;align-items:center;
+  justify-content:center;background:rgba(0,0,0,.6);padding:20px}
+.sheet{background:#000;border:1px solid var(--border-2);width:min(370px,100%);
+  box-shadow:0 10px 34px rgba(0,0,0,.7)}
+.sheet .shead{padding:4px 12px}
+.sheet .body{padding:14px 12px}
+.sheet .hint{font-size:10.5px;color:var(--muted);line-height:1.55}
+.sheet .row{display:grid;gap:5px;padding-top:13px}
+.sheet label{font-size:9px;color:var(--faint);letter-spacing:.14em;
+  text-transform:uppercase}
+.sheet input{width:100%;background:var(--panel);border:1px solid var(--border);
+  border-radius:0;height:30px;padding:0 9px;font-size:11.5px}
+.sheet input::placeholder{color:var(--fainter)}
+.sheet input:focus{outline:none;border-color:var(--border-2)}
+.sheet .acts{display:flex;justify-content:flex-end;gap:8px;padding-top:16px}
+.sheet .acts button.b{height:28px;padding:0 12px;font-size:10.5px;letter-spacing:.06em}
+.sheet .acts button.b.p{padding:0 13px;letter-spacing:.07em}
+@media (max-width:680px){
+  .who .nm{max-width:150px}
+}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <span class="brand" title="TraderRank"><span class="brand-path">~/</span>trader<span class="up">Rank</span><span class="brand-cursor"></span></span>
+  <span class="sep">│</span>
+  <span id="active-name"></span>
+  <span class="sep">│</span>
+  <span id="stat"></span>
+  <span class="grow"></span>
+  <span class="stamp n" id="date">—</span>
+  <span class="sep">│</span>
+  <button id="refresh" title="Refresh" aria-label="Refresh">[F5]</button>
+  <span class="sep">│</span>
+  <button id="view"></button>
+</header>
+
+<div class="wrap">
+  <div class="alert" id="broken" hidden></div>
+  <div class="alert note" id="demo" hidden></div>
+
+  <section id="top-sec">
+    <div class="strip" id="book-strip"></div>
+  </section>
+
+  <div class="layout" id="layout">
+  <main>
+
+  <section id="book-sec">
+    <div id="book-body"></div>
+  </section>
+
+  </main>
+
+  <aside id="groups-sec">
+    <div class="shead">
+      <h2>Watchlists</h2>
+      <span class="c" id="groups-c"></span>
+      <span class="grow"></span>
+    </div>
+    <div id="groups-body"></div>
+    <div id="dhost"></div>
+  </aside>
+  </div>
+
+  <section id="traders-sec" hidden>
+    <div class="shead">
+      <h2>Lead Traders</h2>
+      <span class="c" id="traders-c"></span>
+      <span class="grow"></span>
+      <span class="seg" id="classfilter"></span>
+      <span class="sep">│</span>
+      <input type="search" id="q" placeholder="Search…">
+    </div>
+    <div class="tablescroll" id="traders-body"></div>
+  </section>
+</div>
+
+<div id="host"></div>
+<div id="sel"></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const el = (t, c, x) => { const n = document.createElement(t);
+  if (c) n.className = c; if (x != null) n.textContent = x; return n; };
+const pct = (x, d = 0) => x == null ? "—" : (x * 100).toFixed(d) + "%";
+const sgn = (x, d = 0) => x == null ? "—" : (x >= 0 ? "+" : "") + (x * 100).toFixed(d) + "%";
+const nm = (x, d = 2) => (x == null || !isFinite(x)) ? "—" : x.toFixed(d);
+const dir = x => x == null ? "" : x > 0 ? "up" : x < 0 ? "down" : "";
+// Shown, never filtered on — ADR 0001 rejected a leverage gate.
+const highLeverage = r => (r.tag || []).includes("HIGH_LEVERAGE");
+/* Trader Score is a 0-1 blend of percentiles, so it can be coloured on its
+   own scale: --warn at the bottom, --up at the top, straight RGB between. */
+const SCORE_LO = [223, 162, 70], SCORE_HI = [63, 191, 140];
+const scoreColor = v => {
+  if (v == null || !isFinite(v)) return "";
+  const t = Math.max(0, Math.min(1, v));
+  return "rgb(" + SCORE_LO.map((lo, i) =>
+    Math.round(lo + (SCORE_HI[i] - lo) * t)).join(",") + ")";
+};
+const PALETTE = ["#6f8dff", "#3fbf8c", "#dfa246", "#ec5c6d", "#b78cf0",
+                 "#49b6c9"];
+
+/* The window options come from the server; only the wording is ours. SINCE is
+   the live index — "since I said so" — but "Live" next to a list of lengths
+   would read as live prices, which is the wrong promise in a trading tool. */
+const S = {
+  st: {}, book: null, traders: null, groups: null,
+  sel: new Set(), active: "book",
+  sort: null, filter: "all", q: "", view: "dashboard",
+};
+
+// Off localhost this page is the read-only demo: a static mirror of the last
+// Snapshot published by tools/publish_demo.py, with no server behind it.
+const DEMO = !["localhost", "127.0.0.1"].includes(location.hostname);
+if (DEMO) document.documentElement.classList.add("demo");
+const demoPath = p => "data/" + p.replace(/^\/api\//, "") + ".json";
+
+const get = async p => {
+  const r = await fetch(DEMO ? demoPath(p) : p);
+  if (!r.ok) throw 0;
+  return r.json();
+};
+const post = async (p, b) => {
+  if (DEMO) throw 0;
+  const r = await fetch(p, { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
+  if (!r.ok) throw 0;
+  return r.json();
+};
+
+/* ---------------- views ---------------- */
+
+function closePanels() {
+  $("#host").innerHTML = "";
+  $("#dhost").innerHTML = "";
+}
+
+
+/* Two pages, one document: the dashboard is the strip, the cards and the
+   watchlists; the table is the table, on its own. */
+function setView(v) {
+  S.view = v;
+  closePanels();
+  const table = v === "table";
+  $("#top-sec").hidden = table;
+  $("#layout").hidden = table;
+  $("#traders-sec").hidden = !table;
+  const b = $("#view");
+  b.textContent = table ? "[F2] Dashboard" : "[F2] Table";
+}
+
+/* ---------------- header ---------------- */
+
+function header(s) {
+  S.st = s;
+  // The pull time only describes the Snapshot it finished; an older date
+  // keeps its date alone rather than borrowing today's clock.
+  const at = s.pulled_at && s.date && s.pulled_at.slice(0, 10) === s.date
+    ? s.pulled_at.slice(11) : null;
+  const stamp = $("#date");
+  stamp.textContent = (s.date || "none") + (at ? " " + at : "")
+    + (s.snapshots ? " #" + s.snapshots : "");
+  stamp.title = s.snapshots
+    ? s.snapshots + " snapshots kept" : "no snapshots yet";
+  // Nothing is said when the Snapshot is current — the date says it.
+  const t = $("#stat");
+  t.className = "";
+  if (s.broken) { t.className = "down"; t.textContent = "fetcher broken"; }
+  else if (s.pulling) {
+    t.className = "warn";
+    t.textContent = s.total ? `pulling ${s.done}/${s.total}` : `pulling · ${s.phase}`;
+  } else if (s.date === s.today) { t.textContent = ""; }
+  else { t.className = "faint"; t.textContent = "stale"; }
+  $("#refresh").disabled = !!s.pulling;
+  const b = $("#broken");
+  b.hidden = !s.broken;
+  if (s.broken) b.textContent = "Binance data changed, fetcher needs fixing — " + s.broken;
+  if (DEMO) {
+    t.className = "faint"; t.textContent = "demo";
+    const d = $("#demo");
+    d.hidden = false;
+    d.textContent = "Read-only demo · snapshot of " + (s.date || "—")
+      + " · the real app runs locally and pulls daily";
+  }
+}
+
+/* ---------------- shared bits ---------------- */
+
+function stat(k, v, small, klass) {
+  const d = el("div", "s");
+  d.appendChild(el("div", "k", k));
+  const val = el("div", "v " + (klass || ""), v);
+  if (small) val.appendChild(el("small", null, small));
+  d.appendChild(val);
+  return d;
+}
+
+/* Date-only in, so hours are exact to the day the tick was made. Past a week
+   the hour count stops meaning anything, and days read better. */
+function ago(date) {
+  const h = Math.max(0, Math.round(
+    (Date.now() - Date.parse(date + "T00:00:00Z")) / 3.6e6));
+  return h < 168 ? h + "h" : Math.round(h / 24) + "d";
+}
+
+/* One measure at three windows, on the line a single stat would have used. */
+function trio(k, cells) {
+  const d = el("div", "s");
+  d.appendChild(el("div", "k", k));
+  const v = el("div", "v trio");
+  cells.forEach(([text, klass], i) => {
+    if (i) v.appendChild(el("i", null, "/"));
+    v.appendChild(el("span", "n " + (klass || ""), text));
+  });
+  d.appendChild(v);
+  return d;
+}
+
+function segmented(host, items, active, onPick) {
+  host.innerHTML = "";
+  items.forEach(([key, label, count]) => {
+    const b = el("button", null, label);
+    if (count != null) b.appendChild(el("em", null, count));
+    b.setAttribute("aria-pressed", String(key === active));
+    b.onclick = () => onPick(key);
+    host.appendChild(b);
+  });
+}
+
+/* ---------------- active watchlist (Book / Recommended / a Group) ---------------- */
+
+// Average of one field over a set of rows, ignoring gaps — shared by the
+// Book and Recommended Traders strips, which both summarise a card list.
+function avgOf(rows, f) {
+  const xs = rows.map(f).filter(x => x != null && isFinite(x));
+  return xs.length ? xs.reduce((a, c) => a + c, 0) / xs.length : null;
+}
+
+function winTrio(label, w) {
+  const W = ["7", "30", "90"];
+  const pre = label ? label + " " : "";
+  return { roi: trio(pre + "ROI 7/30/90D",
+      W.map(d => { const v = w(d, "roi"); return [sgn(v, 0), dir(v)]; })),
+    mdd: trio(pre + "MDD 7/30/90D",
+      W.map(d => [pct(w(d, "mdd"), 0), ""])),
+    sortino: trio(pre + "Sortino 7/30/90D",
+      W.map(d => [nm(w(d, "sortino"), 1), ""])) };
+}
+
+/* The drawdown card the Book and a watchlist both carry: what a basket's own
+   blended curve did, what that becomes stressed, and the Drawdown Budget the
+   middle one has to fit inside. Shared on purpose — a watchlist is a Book the
+   user has not committed to, and the two only compare if they are read the
+   same way. The Book passes its sized worst case and a watchlist the whole of
+   its stressed one, which is the same number wherever the Core is not sized
+   down; a watchlist has no size to be sized down by. */
+function ddTrio(label, mdd, worst) {
+  const budget = (S.book || {}).drawdown_budget;
+  return trio((label ? label + " " : "") + "MDD/worst/budget", [
+    [pct(mdd, 1), ""],
+    [pct(worst, 0), worst > budget + 1e-9 ? "down" : ""],
+    [pct(budget, 0), ""]]);
+}
+
+/* A Book/Recommended card: Verdict, reason, recommended size, roi-since-joined
+   or 90D framing. Ranking-derived fields that only exist for Book members and
+   Candidates — never for a Group's equal-weighted basket. */
+function bookCard(r, opts) {
+  const v = (r.verdict || "").toLowerCase();
+  const c = el("div", "card " + v);
+  const top = el("div", "top");
+  const who = el("div", "nmline");
+  who.appendChild(el("span", "nm", r.nickname || r.trader_id));
+  who.appendChild(el("span", "rk",
+    r.score_rank ? "#" + r.score_rank : "unranked"));
+  // Shown, not scored on (plan 0001 item 5) — watched for now, as its own
+  // candidate second factor once item 7 has honest data to choose one on.
+  if (r.btc_beta != null)
+    who.appendChild(el("span", "rk", "β " + nm(r.btc_beta, 2)));
+  top.appendChild(who);
+  // Shown, not filtered on — ADR 0001 rejected a leverage gate, so this is
+  // purely a fact about the trader for the user to weigh themselves.
+  if (highLeverage(r)) top.appendChild(el("span", "chip lev", "LEV"));
+  top.appendChild(el("span", "chip " + v, r.verdict || "—"));
+  c.appendChild(top);
+
+  // Already copying them? The headline is how that copy has gone, and how
+  // long it has had to go wrong. Not yet, and 90D is the only ROI there is.
+  const joined = r.roi_since_joined != null;
+  const headline = joined ? r.roi_since_joined : r.roi_90d;
+  const hl = el("div", "hl");
+  hl.appendChild(el("span", "amt n " + dir(headline), sgn(headline, 0)));
+  hl.appendChild(el("span", "prov", joined && r.joined_date
+    ? "(copied " + ago(r.joined_date) + " ago)" : "(90D · not copied yet)"));
+  // A Cut's 0.0% is a real recommendation and stays one. A Contender has no
+  // size at all, so the slot carries what it is being judged on instead.
+  const sized = r.recommended_size != null;
+  hl.appendChild(el("span", "sk", sized ? "Size" : "Score"));
+  hl.appendChild(el("span", "sv n",
+    sized ? pct(r.recommended_size, 1) : nm(r.trader_score, 2)));
+  c.appendChild(hl);
+
+  c.appendChild(winsGrid(r.windows));
+  const action = opts.onRemove
+    ? { kind: "remove", title: "Remove", onClick: () => opts.onRemove(r) }
+    : opts.onAddBook
+    ? { kind: "add", title: "Add to Book", onClick: () => opts.onAddBook(r) }
+    : null;
+  c.appendChild(footRow(r.reason || "", action));
+
+  c.onclick = () => drawer(r.trader_id);
+  return c;
+}
+
+/* A Group card: no Verdict, reason, size or joined-copy framing — a Group is
+   equal-weighted and has nothing to do with the ranking. Contribution and
+   left-date are the Group-specific facts; the rest is the trader's general
+   stats, joined in from the traders table. */
+function groupCard(m, opts) {
+  const s = m.stats || {};
+  const c = el("div", "card");
+  const top = el("div", "top");
+  const who = el("div", "nmline");
+  who.appendChild(el("span", "nm", m.nickname || m.trader_id));
+  who.appendChild(el("span", "rk",
+    s.score_rank ? "#" + s.score_rank : "unranked"));
+  top.appendChild(who);
+  c.appendChild(top);
+
+  const hl = el("div", "hl");
+  hl.appendChild(el("span", "amt n " + dir(m.contribution), sgn(m.contribution, 0)));
+  hl.appendChild(el("span", "prov", m.left_date
+    ? "(left " + ago(m.left_date) + " ago)"
+    : "(added " + ago(m.joined_date) + " ago)"));
+  hl.appendChild(el("span", "sk", "Score"));
+  hl.appendChild(el("span", "sv n", nm(s.trader_score, 2)));
+  c.appendChild(hl);
+
+  c.appendChild(winsGrid(s.windows));
+  c.appendChild(footRow("",
+    opts.onRemove && { kind: "remove", title: "Remove", onClick: () => opts.onRemove(m) }));
+
+  c.onclick = () => drawer(m.trader_id);
+  return c;
+}
+
+function winsGrid(windows) {
+  const WIN = ["7", "30", "90"];
+  const w = el("div", "wins");
+  w.appendChild(el("div", "k", ""));
+  WIN.forEach(d => w.appendChild(el("div", "h", d + "D")));
+  [["ROI", d => { const x = (windows || {})[d];
+                  const y = x && x.roi;
+                  return [sgn(y, 0), dir(y)]; }],
+   ["MDD", d => { const x = (windows || {})[d];
+                  return [pct(x && x.mdd, 0), ""]; }],
+  ].forEach(([label, cell]) => {
+    w.appendChild(el("div", "k", label));
+    WIN.forEach(d => { const [text, klass] = cell(d);
+      w.appendChild(el("div", "c " + klass, text)); });
+  });
+  return w;
+}
+
+// The reason/note on the left, one small icon action bottom-right — a trash
+// icon to remove, or a plus to add to Book — shared by both card kinds so
+// the action always sits beside the note rather than as its own button.
+function footRow(text, action) {
+  const f = el("div", "foot");
+  f.appendChild(el("span", "txt", text));
+  if (action) {
+    const btn = el("button", "icon " + (action.kind === "add" ? "add" : "rm"));
+    btn.title = action.title; btn.setAttribute("aria-label", action.title);
+    btn.appendChild(action.kind === "add" ? plus() : trash());
+    btn.onclick = async e => {
+      e.stopPropagation(); btn.disabled = true;
+      await action.onClick();
+    };
+    f.appendChild(btn);
+  }
+  return f;
+}
+
+async function removeFromBook(r) {
+  await post("/api/book", { trader_id: r.trader_id, in_book: false });
+  await load();
+}
+
+async function addToBook(r) {
+  await post("/api/book", { trader_id: r.trader_id, in_book: true });
+  await load();
+}
+
+async function removeFromGroup(groupId, m) {
+  S.groups = await post("/api/groups/edit",
+    { group_id: groupId, remove: [m.trader_id] });
+  renderWatchlists(); renderActive();
+}
+
+// However few cards a watchlist has, the aside's drawer overlays exactly the
+// main area's height (grid align-items:stretch) — so a 1-row watchlist would
+// otherwise open a cramped, 1-row-tall drawer. Reserve 3 card-rows' worth of
+// height so opening the drawer never feels squeezed.
+function reserveCardRows(body, minRows = 3) {
+  const grid = body.querySelector(".cards");
+  if (!grid) return;
+  const first = grid.querySelector(".card");
+  if (!first) return;
+  const rowH = first.getBoundingClientRect().height;
+  const rows = Math.ceil(grid.children.length / 3);
+  grid.style.minHeight = rows < minRows ? (rowH * minRows) + "px" : "";
+}
+
+function renderActive() {
+  const strip = $("#book-strip"), body = $("#book-body");
+  strip.innerHTML = ""; body.innerHTML = "";
+  if (!S.book || !S.groups) { body.appendChild(el("div", "empty", "…")); return; }
+
+  if (S.active === "book") renderBookView(strip, body);
+  else if (S.active === "recommended") renderRecommendedView(strip, body);
+  else renderGroupView(strip, body);
+  reserveCardRows(body);
+}
+
+function renderBookView(strip, body) {
+  $("#active-name").textContent = "Book";
+  const rows = S.book.book || [];
+
+  const w = (d, k) => avgOf(rows, r => (r.windows || {})[d] && r.windows[d][k]);
+  const t = winTrio("Avg", w);
+  strip.appendChild(t.roi); strip.appendChild(t.mdd); strip.appendChild(t.sortino);
+
+  const since = avgOf(rows, r => r.roi_since_joined);
+  if (since != null)
+    strip.appendChild(stat("Avg since joined", sgn(since, 1), "copied",
+      dir(since)));
+  if (S.book.holdback > 0.001)
+    strip.appendChild(stat("Holdback", pct(S.book.holdback, 0), "uncopied"));
+  strip.appendChild(ddTrio("Book", S.book.mdd_core, S.book.expected_worst));
+  // Shown, not scored on — item 7 of plan 0001 may make this a factor once
+  // there is honest data to choose a second one on; for now it is watched.
+  if (S.book.btc_beta != null)
+    strip.appendChild(stat("BTC beta", nm(S.book.btc_beta, 2), "weighted"));
+
+  if (!rows.length) {
+    body.appendChild(el("div", "empty",
+      "Nobody in the Book yet. Select traders in the table below and use "
+      + "“+ Book”, or add them from Recommended Traders."));
+    return;
+  }
+  const cards = el("div", "cards");
+  rows.forEach(r => cards.appendChild(bookCard(r, { onRemove: removeFromBook })));
+  body.appendChild(cards);
+}
+
+/* The best Candidates outside the Book, whether or not the ranking has room
+   for them. A full Book used to leave this empty, which said the ranking had
+   found nobody when what it had found was nowhere to put them — and a full
+   Book is exactly when seeing who is outside it is worth most. */
+function renderRecommendedView(strip, body) {
+  $("#active-name").textContent = "Recommended Traders";
+  const rows = S.book.contenders || [];
+
+  const w = (d, k) => avgOf(rows, r => (r.windows || {})[d] && r.windows[d][k]);
+  const t = winTrio("Avg", w);
+  strip.appendChild(t.roi); strip.appendChild(t.mdd); strip.appendChild(t.sortino);
+
+  if (!rows.length) {
+    // Nobody to show has two quite different causes, and the old copy only
+    // ever named one of them.
+    const cands = ((S.traders || {}).rows || [])
+      .filter(r => r.class === "candidate").length;
+    body.appendChild(el("div", "empty", cands
+      ? "Every Candidate today is already in your Book."
+      : "No Candidates today, so there is nothing to recommend. "
+        + "Every trader pulled is in the table below with the reason they failed."));
+    return;
+  }
+  const cards = el("div", "cards");
+  rows.forEach(r => cards.appendChild(bookCard(r, { onAddBook: addToBook })));
+  body.appendChild(cards);
+}
+
+function renderGroupView(strip, body) {
+  const g = (S.groups.groups || []).find(x => x.group_id === S.active);
+  if (!g) { S.active = "book"; return renderBookView(strip, body); }
+  $("#active-name").textContent = g.name;
+
+  const w = (d, k) => { const x = (g.windows || {})[d]; return x && x[k]; };
+  const t = winTrio("", w);
+  strip.appendChild(t.roi); strip.appendChild(t.mdd); strip.appendChild(t.sortino);
+
+  // The same two the Book reports, so a watchlist can be read as the Book it
+  // would be: how its members have done since they were added, and whether
+  // the basket would fit inside the Budget. The average summarises exactly
+  // the cards below it, departed members included, as the Book's does.
+  const since = avgOf(g.members, m => m.contribution);
+  if (since != null)
+    strip.appendChild(stat("Avg since added", sgn(since, 1), "", dir(since)));
+  const dd = g.drawdown || {};
+  strip.appendChild(ddTrio("", dd.mdd, dd.worst));
+
+  if (!g.members.length) {
+    body.appendChild(el("div", "empty",
+      "No traders in this watchlist. Select traders in the table below and "
+      + "use “+ " + g.name + "”."));
+    return;
+  }
+  const byId = new Map((S.traders && S.traders.rows || []).map(r => [r.trader_id, r]));
+  const cards = el("div", "cards");
+  g.members.forEach(m => cards.appendChild(groupCard(
+    Object.assign({ stats: byId.get(m.trader_id) }, m),
+    { onRemove: mm => removeFromGroup(g.group_id, mm) })));
+  body.appendChild(cards);
+}
+
+/* ---------------- watchlists ---------------- */
+
+function xicon() {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "11"); svg.setAttribute("height", "11");
+  svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2.2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("aria-hidden", "true");
+  ["M6 6l12 12", "M18 6L6 18"].forEach(d => {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", d);
+    svg.appendChild(p);
+  });
+  return svg;
+}
+
+function trash() {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "11"); svg.setAttribute("height", "11");
+  svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  ["M3 6h18", "M8 6V4h8v2", "M6 6l1 14h10l1-14"].forEach(d => {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", d);
+    svg.appendChild(p);
+  });
+  return svg;
+}
+
+function plus() {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "11"); svg.setAttribute("height", "11");
+  svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2.2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("aria-hidden", "true");
+  ["M12 4v16", "M4 12h16"].forEach(d => {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", d);
+    svg.appendChild(p);
+  });
+  return svg;
+}
+
+function person() {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("width", "10"); svg.setAttribute("height", "10");
+  svg.setAttribute("fill", "currentColor");
+  svg.setAttribute("aria-hidden", "true");
+  const head = document.createElementNS(NS, "circle");
+  head.setAttribute("cx", "8"); head.setAttribute("cy", "5");
+  head.setAttribute("r", "2.7");
+  const body = document.createElementNS(NS, "path");
+  body.setAttribute("d", "M2.7 14.5a5.3 5.3 0 0 1 10.6 0z");
+  svg.appendChild(head); svg.appendChild(body);
+  return svg;
+}
+
+/* The watchlist line at row size: shape only, no axes and no labels. */
+function spark(points, color, W = 70, H = 26) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "spark");
+  svg.setAttribute("width", W); svg.setAttribute("height", H);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  if (points.length < 2) return svg;
+  const ys = points.map(p => p[1]);
+  let lo = Math.min(...ys), hi = Math.max(...ys);
+  if (hi - lo < 1e-9) { hi += 1; lo -= 1; }
+  const X = i => i / (points.length - 1) * (W - 1) + .5;
+  const Y = v => 1.5 + (1 - (v - lo) / (hi - lo)) * (H - 3);
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("d", points.map((p, i) =>
+    (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p[1]).toFixed(1)).join(" "));
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", color);
+  path.setAttribute("stroke-width", "1.2");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(path);
+  return svg;
+}
+
+/* One measure at three windows, on one line: 34% / 68% / 57%. */
+function metline(label, cells) {
+  const out = [el("div", "k", label)];
+  const v = el("div", "v");
+  cells.forEach(([text, klass], i) => {
+    if (i) v.appendChild(el("i", null, "/"));
+    v.appendChild(el("span", klass || "", text));
+  });
+  out.push(v);
+  return out;
+}
+
+// A pinned row's compact preview: a mets trio, no sparkline (there is no
+// aggregate series for Book or Recommended Traders the way a Group has one).
+function pinnedRow(key, name, rows, count) {
+  const row = el("div", "wrow" + (S.active === key ? " active" : ""));
+  const hd = el("div", "hd");
+  hd.appendChild(el("span", "nm", name));
+  const cnt = el("span", "cnt");
+  cnt.appendChild(person());
+  cnt.appendChild(document.createTextNode(String(count)));
+  hd.appendChild(cnt);
+  row.appendChild(hd);
+
+  const w = (d, k) => avgOf(rows, r => (r.windows || {})[d] && r.windows[d][k]);
+  const bd = el("div", "bd");
+  const mets = el("div", "mets");
+  metline("ROI", ["7", "30", "90"].map(d => { const v = w(d, "roi");
+    return [sgn(v, 0), "n " + dir(v)]; })).forEach(n => mets.appendChild(n));
+  metline("MDD", ["7", "30", "90"].map(d => [pct(w(d, "mdd"), 0), "n"]))
+    .forEach(n => mets.appendChild(n));
+  metline("Sortino", ["7", "30", "90"].map(d => [nm(w(d, "sortino"), 1), "n"]))
+    .forEach(n => mets.appendChild(n));
+  bd.appendChild(mets);
+  row.appendChild(bd);
+
+  row.onclick = () => { S.active = key; renderWatchlists(); renderActive(); };
+  return row;
+}
+
+function renderWatchlists() {
+  const host = $("#groups-body");
+  host.innerHTML = "";
+  const d = S.groups;
+  if (!d || !S.book) { host.appendChild(el("div", "empty", "…")); return; }
+
+  const gs = d.groups || [];
+  $("#groups-c").textContent = String(2 + gs.length);
+
+  const WIN = ["7", "30", "90"];
+  const list = el("div", "wl");
+  list.appendChild(pinnedRow("book", "Book", S.book.book || [],
+    (S.book.book || []).length));
+  list.appendChild(pinnedRow("recommended", "Recommended Traders",
+    S.book.contenders || [], (S.book.contenders || []).length));
+
+  if (!gs.length) {
+    const e = el("div", "empty");
+    e.appendChild(el("b", null, "No custom watchlists yet."));
+    e.appendChild(document.createTextNode(
+      "Select traders in the table and bin them into a watchlist to watch "
+      + "how that idea does. A new watchlist is scored over the stored "
+      + "history straight away."));
+    list.appendChild(e);
+    host.appendChild(list);
+    return;
+  }
+
+  gs.forEach((g, i) => {
+    const color = PALETTE[i % PALETTE.length];
+    const row = el("div", "wrow" + (S.active === g.group_id ? " active" : ""));
+
+    const hd = el("div", "hd");
+    const dot = el("span", "gdot"); dot.style.background = color;
+    hd.appendChild(dot);
+    hd.appendChild(el("span", "nm", g.name));
+    const cnt = el("span", "cnt");
+    cnt.appendChild(person());
+    cnt.appendChild(document.createTextNode(
+      String(g.members.filter(m => !m.left_date).length)));
+    hd.appendChild(cnt);
+    const del = el("button", "trash");
+    del.title = "Delete watchlist";
+    del.setAttribute("aria-label", "Delete watchlist");
+    del.appendChild(trash());
+    del.onclick = async e => {
+      e.stopPropagation();
+      if (!confirm(`Delete the watchlist "${g.name}"? The traders stay.`))
+        return;
+      S.groups = await post("/api/groups/delete", { group_id: g.group_id });
+      if (S.active === g.group_id) S.active = "book";
+      renderWatchlists(); renderActive();
+    };
+    hd.appendChild(del);
+    row.appendChild(hd);
+
+    const w = k => WIN.map(n => {
+      const x = (g.windows || {})[n] || {};
+      return x[k];
+    });
+    const bd = el("div", "bd");
+    const mets = el("div", "mets");
+    metline("ROI", w("roi").map(v => [sgn(v, 0), "n " + dir(v)]))
+      .forEach(n => mets.appendChild(n));
+    metline("MDD", w("mdd").map(v => [pct(v, 0), "n"]))
+      .forEach(n => mets.appendChild(n));
+    metline("Sortino", w("sortino").map(v => [nm(v, 1), "n"]))
+      .forEach(n => mets.appendChild(n));
+    bd.appendChild(mets);
+    // Always the live line: how the watchlist has gone since it was made.
+    bd.appendChild(spark(g.index.series, color));
+    row.appendChild(bd);
+
+    row.onclick = () => { S.active = g.group_id; renderWatchlists(); renderActive(); };
+    list.appendChild(row);
+  });
+  host.appendChild(list);
+}
+
+/* ---------------- traders table ---------------- */
+
+/* The window trio in one cell. `w(r, "roi")` is the 90D value, which is what
+   the column sorts on. */
+const w3 = (r, k) => ["7", "30", "90"].map(d => ((r.windows || {})[d] || {})[k]);
+const w90 = (r, k) => ((r.windows || {})["90"] || {})[k];
+
+function cell3(vals, fmt, colour) {
+  const box = el("span", "t3");
+  vals.forEach((v, i) => {
+    if (i) box.appendChild(el("i", null, "/"));
+    box.appendChild(el("span", colour ? dir(v) : "", fmt(v)));
+  });
+  return box;
+}
+
+/* The row's own ROI line: green if it ends up, red if it ends down. */
+function rowline(vals, roi) {
+  const NS = "http://www.w3.org/2000/svg";
+  const W = 70, H = 14;
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "rowline");
+  svg.setAttribute("width", W); svg.setAttribute("height", H);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  if (vals.length < 2) return svg;
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi - lo < 1e-9) { hi += .01; lo -= .01; }
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("d", vals.map((v, i) =>
+    (i ? "L" : "M") + (i / (vals.length - 1) * (W - 1) + .5).toFixed(1) + " "
+    + (1 + (1 - (v - lo) / (hi - lo)) * (H - 2)).toFixed(1)).join(" "));
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke-width", "1.1");
+  path.setAttribute("stroke-linejoin", "round");
+  path.setAttribute("stroke", roi == null ? "var(--muted)"
+    : roi >= 0 ? "var(--up)" : "var(--down)");
+  svg.appendChild(path);
+  return svg;
+}
+
+/* The only two dollar figures on the page, AUM and copier PnL. The sign sits
+   outside the $, the way a ledger writes it. */
+const money = x => {
+  if (x == null) return "—";
+  const a = Math.abs(x);
+  const n = a >= 1e6 ? (a / 1e6).toFixed(1) + "M"
+    : a >= 1e3 ? Math.round(a / 1e3) + "k"
+    : String(Math.round(a));
+  return (x < 0 && parseFloat(n) > 0 ? "-$" : "$") + n;
+};
+
+const COLS = [
+  { k: "trader_score", h: "Score", s: r => r.trader_score,
+    n: r => { const n = el("span", null, nm(r.trader_score, 3));
+      n.style.color = scoreColor(r.trader_score);
+      return n; } },
+  { k: "age_days", h: "Days", v: r =>
+      [r.age_days ? Math.round(r.age_days) : "—", "faint"], s: r => r.age_days },
+  { k: "roi", h: "ROI 7/30/90", s: r => w90(r, "roi"),
+    n: r => cell3(w3(r, "roi"), v => sgn(v, 0), true) },
+  { k: "mdd", h: "MDD 7/30/90", s: r => w90(r, "mdd"),
+    n: r => cell3(w3(r, "mdd"), v => pct(v, 0), false) },
+  // The pair the 7/30/90 beside them cannot see: how far the trader fell, and
+  // whether any of it came back. Their window is whatever history the trader
+  // has, so History is the column that completes both.
+  { k: "roi_all", h: "ROI all", s: r => r.roi_all,
+    t: "What a copy started on the trader's first stored day would have made, "
+      + "however long ago that is — History is the span. A Candidate has to be "
+      + "above water.",
+    v: r => [sgn(r.roi_all, 0), dir(r.roi_all)] },
+  { k: "mdd_all", h: "MDD all", s: r => r.mdd_all,
+    t: "Worst peak-to-trough fall over the trader's whole stored series, "
+      + "however long that is — History is the span. A Candidate has to be "
+      + "under 65%.",
+    v: r => [pct(r.mdd_all, 1), ""] },
+  { k: "sortino", h: "Sortino 7/30/90", s: r => w90(r, "sortino"),
+    n: r => cell3(w3(r, "sortino"), v => nm(v, 1), false) },
+  { k: "spark", h: "90D", s: r => w90(r, "roi"),
+    n: r => rowline(r.spark || [], w90(r, "roi")) },
+  { k: "copy_count", h: "Copiers", s: r => r.copy_count,
+    n: r => { const box = el("span", "cnt");
+      box.appendChild(person());
+      box.appendChild(document.createTextNode(
+        r.copy_count == null ? "—" : String(r.copy_count)));
+      return box; } },
+  { k: "trades_90d", h: "Trades", v: r =>
+      [r.trades_90d == null ? "—" : r.trades_90d.toLocaleString("en-US"),
+       "muted"], s: r => r.trades_90d },
+  { k: "win_rate_90d", h: "Win", v: r => [pct(r.win_rate_90d), ""],
+    s: r => r.win_rate_90d },
+  { k: "calmar", h: "Calmar", v: r => [nm(r.calmar, 1), ""], s: r => r.calmar },
+  { k: "sharpe", h: "Sharpe", v: r => [nm(r.sharpe, 2), "faint"],
+    s: r => r.sharpe },
+  { k: "sigma", h: "σ", v: r => [pct(r.sigma, 1), "muted"], s: r => r.sigma },
+  { k: "btc_beta", h: "β BTC", v: r => [nm(r.btc_beta, 2), "muted"],
+    s: r => r.btc_beta,
+    t: "Beta against Bitcoin's daily return over the same 180-day window. "
+      + "Shown, not scored on." },
+  { k: "aum", h: "AUM", v: r => [money(r.aum), "muted"], s: r => r.aum },
+  { k: "copier_pnl_90d", h: "Copier PnL",
+    v: r => [money(r.copier_pnl_90d), dir(r.copier_pnl_90d)],
+    s: r => r.copier_pnl_90d },
+  { k: "profit_sharing_rate", h: "Fee", v: r =>
+      [r.profit_sharing_rate == null ? "—" : pct(r.profit_sharing_rate, 0),
+       "muted"], s: r => r.profit_sharing_rate },
+  { k: "series_days", h: "History", v: r =>
+      [r.series_days ? r.series_days + "d" : "—", "faint"],
+    s: r => r.series_days },
+  { k: "recommended_size", h: "Size", v: r =>
+      [r.recommended_size ? pct(r.recommended_size, 1) : "—",
+       r.recommended_size ? "" : "faint"],
+    s: r => r.recommended_size },
+  { k: "reason", h: "Reason", v: r => [r.reason || "", "reason"], s: r => r.reason,
+    left: true },
+];
+
+function filtered() {
+  const rows = (S.traders && S.traders.rows) || [];
+  const q = S.q.trim().toLowerCase();
+  let out = rows.filter(r => {
+    if (S.filter === "candidate" && r.class !== "candidate") return false;
+    if (S.filter === "excluded" && r.class === "candidate") return false;
+    if (S.filter === "book" && !r.in_book) return false;
+    if (q && !((r.nickname || "").toLowerCase().includes(q)
+      || r.trader_id.includes(q))) return false;
+    return true;
+  });
+  if (S.sort) {
+    const col = COLS.find(c => c.k === S.sort.k);
+    const sign = S.sort.dir === "asc" ? 1 : -1;
+    out = out.slice().sort((a, b) => {
+      const x = col.s(a), y = col.s(b);
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return (typeof x === "string" ? x.localeCompare(y) : x - y) * sign;
+    });
+  }
+  return out;
+}
+
+function renderTraders() {
+  const host = $("#traders-body");
+  host.innerHTML = "";
+  const all = (S.traders && S.traders.rows) || [];
+  const nc = all.filter(r => r.class === "candidate").length;
+  const nb = all.filter(r => r.in_book).length;
+  segmented($("#classfilter"), [
+    ["all", "All", all.length], ["candidate", "Cand", nc],
+    ["excluded", "Excl", all.length - nc], ["book", "Book", nb],
+  ], S.filter, k => { S.filter = k; renderTraders(); });
+
+  const rows = filtered();
+  $("#traders-c").textContent = all.length ? String(rows.length) : "";
+  if (!all.length) {
+    host.appendChild(el("div", "empty",
+      "No Snapshot yet. Hit Refresh to pull today's leaderboards."));
+    return;
+  }
+  if (!rows.length) {
+    host.appendChild(el("div", "empty", "Nothing matches that filter."));
+    return;
+  }
+
+  const cols = COLS;
+  const t = el("table");
+  const hr = el("tr");
+  const box = el("th");
+  const all_cb = el("input"); all_cb.type = "checkbox"; all_cb.className = "tick";
+  all_cb.checked = rows.length && rows.every(r => S.sel.has(r.trader_id));
+  all_cb.title = "Select all shown";
+  all_cb.onclick = () => {
+    if (all_cb.checked) rows.forEach(r => S.sel.add(r.trader_id));
+    else rows.forEach(r => S.sel.delete(r.trader_id));
+    renderTraders(); renderSelbar();
+  };
+  box.appendChild(all_cb);
+  hr.appendChild(box);
+  const rkh = el("th", "sortable", "#");
+  rkh.title = "Trader Score rank.";
+  rkh.onclick = () => {
+    S.sort = S.sort && S.sort.k === "score_rank" && S.sort.dir === "asc"
+      ? null : { k: "score_rank", dir: "asc" };
+    renderTraders();
+  };
+  if (S.sort && S.sort.k === "score_rank") rkh.setAttribute("aria-sort",
+    "ascending");
+  hr.appendChild(rkh);
+  hr.appendChild(el("th", "l", "Trader"));
+  cols.forEach(c => {
+    const th = el("th", "sortable" + (c.left ? " l" : ""), c.h);
+    if (c.t) th.title = c.t;
+    if (S.sort && S.sort.k === c.k) {
+      th.setAttribute("aria-sort", S.sort.dir === "asc" ? "ascending" : "descending");
+      th.appendChild(el("i", null, S.sort.dir === "asc" ? "▲" : "▼"));
+    }
+    th.onclick = () => {
+      if (S.sort && S.sort.k === c.k)
+        S.sort = S.sort.dir === "desc" ? { k: c.k, dir: "asc" } : null;
+      else S.sort = { k: c.k, dir: "desc" };
+      renderTraders();
+    };
+    hr.appendChild(th);
+  });
+  const thead = el("thead"); thead.appendChild(hr); t.appendChild(thead);
+
+  const tb = el("tbody");
+  rows.forEach(r => {
+    const tr = el("tr", r.class === "candidate" ? "" : "ex");
+    if (S.sel.has(r.trader_id)) tr.className += " sel";
+
+    const ctd = el("td");
+    const cb = el("input"); cb.type = "checkbox"; cb.className = "tick";
+    cb.checked = S.sel.has(r.trader_id);
+    cb.onclick = e => {
+      e.stopPropagation();
+      if (cb.checked) S.sel.add(r.trader_id); else S.sel.delete(r.trader_id);
+      tr.classList.toggle("sel", cb.checked);
+      renderSelbar();
+    };
+    ctd.onclick = e => e.stopPropagation();
+    ctd.appendChild(cb);
+    tr.appendChild(ctd);
+
+    const rtd = el("td");
+    const rkc = el("span", "rk-cell");
+    rkc.appendChild(el("span", "faint", r.score_rank ? "#" + r.score_rank : "—"));
+    rtd.appendChild(rkc);
+    tr.appendChild(rtd);
+
+    const wtd = el("td", "l");
+    const w = el("div", "who");
+    w.appendChild(el("span", "nm", r.nickname || r.trader_id));
+    if (highLeverage(r)) w.appendChild(el("span", "chip lev", "LEV"));
+    w.appendChild(el("span", "sub", "#" + r.trader_id.slice(-6)
+      + (r.groups && r.groups.length ? " · " + r.groups.join(", ") : "")));
+    wtd.appendChild(w);
+    tr.appendChild(wtd);
+
+    cols.forEach(c => {
+      const td = el("td", c.left ? "l" : "");
+      if (c.n) { td.appendChild(c.n(r)); }
+      else {
+        const [v, k] = c.v(r);
+        td.className = (k || "") + (c.left ? " l" : "");
+        td.textContent = v == null ? "—" : String(v);
+      }
+      tr.appendChild(td);
+    });
+
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  host.appendChild(t);
+}
+
+/* ---------------- selection bar ---------------- */
+
+function renderSelbar() {
+  const host = $("#sel");
+  host.innerHTML = "";
+  if (!S.sel.size) return;
+  const bar = el("div", "selbar");
+  bar.appendChild(el("b", null, String(S.sel.size)));
+  bar.appendChild(el("span", "muted",
+    "selected"));
+  const nw = el("button", "b p", "New watchlist…");
+  nw.onclick = () => newGroupSheet();
+  bar.appendChild(nw);
+  const bk = el("button", "b", "+ Book");
+  bk.onclick = async () => {
+    bk.disabled = true;
+    for (const tid of S.sel) await post("/api/book", { trader_id: tid, in_book: true });
+    S.sel.clear();
+    await load();
+  };
+  bar.appendChild(bk);
+  ((S.groups && S.groups.groups) || []).forEach(g => {
+    const b = el("button", "b", "+ " + g.name);
+    b.onclick = async () => {
+      S.groups = await post("/api/groups/edit",
+        { group_id: g.group_id, add: [...S.sel] });
+      S.sel.clear();
+      renderTraders(); renderWatchlists(); renderSelbar();
+    };
+    bar.appendChild(b);
+  });
+  const c = el("button", "b", "Clear");
+  c.onclick = () => { S.sel.clear(); renderTraders(); renderSelbar(); };
+  bar.appendChild(c);
+  host.appendChild(bar);
+}
+
+function newGroupSheet() {
+  const host = $("#host");
+  host.innerHTML = "";
+  const m = el("div", "modal");
+  const sheet = el("div", "sheet");
+  sheet.appendChild(el("h3", "shead", "New watchlist"));
+  const body = el("div", "body");
+  sheet.appendChild(body);
+  body.appendChild(el("div", "hint",
+    S.sel.size + " traders, equal-weighted. Scored over the stored history "
+    + "straight away, and live from today."));
+
+  const r1 = el("div", "row");
+  r1.appendChild(el("label", null, "Name"));
+  const name = el("input"); name.type = "text"; name.placeholder = "e.g. Low leverage";
+  r1.appendChild(name); body.appendChild(r1);
+
+  const acts = el("div", "acts");
+  const cancel = el("button", "b", "Cancel");
+  cancel.onclick = () => host.innerHTML = "";
+  const ok = el("button", "b p", "Create");
+  ok.onclick = async () => {
+    ok.disabled = true;
+    S.groups = await post("/api/groups", {
+      name: name.value || "Untitled", trader_ids: [...S.sel],
+    });
+    S.sel.clear();
+    host.innerHTML = "";
+    renderTraders(); renderWatchlists(); renderSelbar();
+  };
+  acts.appendChild(cancel); acts.appendChild(ok);
+  body.appendChild(acts);
+  m.appendChild(sheet);
+  m.onclick = e => { if (e.target === m) host.innerHTML = ""; };
+  host.appendChild(m);
+  name.focus();
+  name.onkeydown = e => { if (e.key === "Enter") ok.click(); };
+}
+
+/* ---------------- chart ---------------- */
+
+/* The line and nothing else, except what the peak and the trough were. */
+function minichart(series, fmt, W = 320, H = 96) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "mini");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const mk = (n, a, text) => {
+    const e = document.createElementNS(NS, n);
+    for (const k in a) e.setAttribute(k, a[k]);
+    if (text != null) e.textContent = text;
+    svg.appendChild(e);
+    return e;
+  };
+  if (series.length < 2) return svg;
+  const ys = series.map(p => p[1]);
+  let lo = Math.min(...ys), hi = Math.max(...ys);
+  if (hi - lo < 1e-9) { hi += .01; lo -= .01; }
+  const L = 4, R = 4, T = 14, B = 14;
+  const X = i => L + i / (series.length - 1) * (W - L - R);
+  const Y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+  mk("path", {
+    d: series.map((p, i) => (i ? "L" : "M") + X(i).toFixed(1) + " "
+      + Y(p[1]).toFixed(1)).join(" "),
+    fill: "none", stroke: "var(--up)", "stroke-width": 1.4,
+    "stroke-linejoin": "round",
+  });
+  // Only the two points worth a number: the best it ever was and the worst.
+  [[ys.indexOf(hi), hi, -6], [ys.indexOf(lo), lo, 11]].forEach(
+    ([i, v, dy]) => {
+      const x = X(i), y = Y(v);
+      mk("circle", { cx: x.toFixed(1), cy: y.toFixed(1), r: 1.9, class: "pt" });
+      const anchor = x < 30 ? "start" : x > W - 30 ? "end" : "middle";
+      mk("text", { x: x.toFixed(1), y: (y + dy).toFixed(1), class: "lbl",
+        "text-anchor": anchor }, fmt(v));
+    });
+  return svg;
+}
+
+/* ---------------- drawer ---------------- */
+
+async function drawer(id) {
+  // Only the cards open this, and it only ever covers the watchlist.
+  const host = $("#dhost");
+  closePanels();
+  const close = () => host.innerHTML = "";
+  const d = el("div", "drawer over");
+  d.appendChild(el("div", "empty", "…"));
+  host.appendChild(d);
+  let t;
+  try { t = await get("/api/trader/" + encodeURIComponent(id)); }
+  catch (e) { d.innerHTML = ""; d.appendChild(el("div", "empty", "No data.")); return; }
+
+  d.innerHTML = "";
+  const head = el("div", "shead");
+  head.appendChild(el("span", null, "Trader"));
+  head.appendChild(el("span", "id", "#" + t.trader_id.slice(-6)));
+  head.appendChild(el("span", "grow"));
+  const x = el("button", "icon close");
+  x.title = "Close"; x.setAttribute("aria-label", "Close");
+  x.appendChild(xicon());
+  x.onclick = close;
+  head.appendChild(x);
+  d.appendChild(head);
+
+  const body = el("div", "dbody");
+  d.appendChild(body);
+
+  const nmrow = el("div", "dname");
+  nmrow.appendChild(el("h2", null, t.nickname || t.trader_id));
+  nmrow.appendChild(el("span", "rk", t.score_rank ? "#" + t.score_rank : "unranked"));
+  nmrow.appendChild(el("span", "grow"));
+  nmrow.appendChild(el("span", "badge" + (t.class === "candidate" ? " cand" : ""),
+    t.class === "candidate" ? "Candidate" : "Excluded"));
+  body.appendChild(nmrow);
+
+  const tags = (t.tag || []).concat((t.groups || []).map(g => g.name));
+  if (tags.length) body.appendChild(el("div", "tagline", tags.join(" · ")));
+
+  // The three that come in windows, in the same 7/30/90 the cards and the
+  // table use; everything else is one number and stays one number.
+  const wins = el("div", "dmets");
+  wins.appendChild(el("div", "k", ""));
+  wins.appendChild(el("div", "dwin", "7 / 30 / 90D"));
+  [["ROI", "roi", v => sgn(v, 0), true],
+   ["MDD", "mdd", v => pct(v, 0), false],
+   ["Sortino", "sortino", v => nm(v, 1), false],
+  ].forEach(([label, key, fmt, colour]) => {
+    metline(label, w3(t, key).map(v => [fmt(v), colour ? dir(v) : ""]))
+      .forEach(n => wins.appendChild(n));
+  });
+  body.appendChild(wins);
+
+  const g = el("div", "grid");
+  [["Score", nm(t.trader_score, 3)],
+   ["Rank", t.score_rank || "—"],
+   ["Days", t.age_days ? Math.round(t.age_days) : "—"],
+   ["Copiers", t.copy_count == null ? "—" : t.copy_count],
+   // The two the table leads on, and the two this ranker is built around.
+   ["Copier PnL", money(t.copier_pnl_90d), dir(t.copier_pnl_90d)],
+   ["AUM", money(t.aum), "muted"],
+   ["Trades", t.trades_90d == null ? "—" : t.trades_90d],
+   ["Calmar", nm(t.calmar, 1)],
+   ["σ", pct(t.sigma, 1)],
+   ["Sharpe", nm(t.sharpe, 2)],
+   ["Win", pct(t.win_rate_90d)],
+   // Both sit beside History on purpose: the span is half the number.
+   ["ROI all", sgn(t.roi_all, 0), dir(t.roi_all)],
+   ["MDD all", pct(t.mdd_all, 1)],
+   ["History", t.series_days + "d"],
+   ["Fee", t.profit_sharing_rate != null ? pct(t.profit_sharing_rate, 0) : "—"],
+   ["Size", t.recommended_size ? pct(t.recommended_size, 1) : "—"],
+  ].forEach(([k, v, cls]) => {
+    const s = el("div", "g");
+    s.appendChild(el("div", "k", k));
+    s.appendChild(el("div", "v" + (cls ? " " + cls : ""), String(v)));
+    g.appendChild(s);
+  });
+  body.appendChild(g);
+
+  body.appendChild(el("div", "sec", "ROI"));
+  body.appendChild(minichart(t.series, v => sgn(v, 0)));
+
+  if (t.reason) {
+    body.appendChild(el("div", "sec", "Notes"));
+    body.appendChild(el("div", "notes", t.reason));
+  }
+}
+
+/* ---------------- wiring ---------------- */
+
+async function loadGroups() {
+  S.groups = await get("/api/groups");
+  renderWatchlists(); renderSelbar(); renderActive();
+}
+
+async function load() {
+  const [book, traders] = await Promise.all(
+    ["/api/book", "/api/traders"].map(get));
+  S.book = book; S.traders = traders;
+  renderTraders();
+  await loadGroups();
+}
+
+async function poll() {
+  try {
+    const s = await get("/api/status");
+    const was = S.st.pulling, wasDate = S.st.date;
+    header(s);
+    if ((was && !s.pulling) || s.date !== wasDate) await load();
+  } catch (e) { /* server busy; next tick */ }
+}
+
+$("#refresh").onclick = async () => {
+  $("#refresh").disabled = true;
+  header((await post("/api/refresh", {})).status);
+};
+$("#q").oninput = e => {
+  S.q = e.target.value;
+  // A search with something in it reads like the selected tab.
+  e.target.classList.toggle("on", !!S.q.trim());
+  renderTraders();
+};
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    if ($("#host").innerHTML || $("#dhost").innerHTML) closePanels();
+    else if (S.sel.size) { S.sel.clear(); renderTraders(); renderSelbar(); }
+  }
+});
+
+$("#view").onclick = () =>
+  setView(S.view === "table" ? "dashboard" : "table");
+
+(async () => {
+  setView("dashboard");
+  await poll();
+  try { await load(); } catch (e) { renderActive(); renderTraders(); renderWatchlists(); }
+  if (!DEMO) setInterval(poll, 5000);
+})();
+</script>
+</body>
+</html>
